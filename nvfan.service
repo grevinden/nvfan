@@ -1,0 +1,14 @@
+[Unit]
+Description=GPU Fan Curve Controller
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/rasty/Documents/nvfan/nvfan
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

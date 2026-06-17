@@ -1,0 +1,49 @@
+name: Build release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc scons
+          pip install --break-system-packages nuitka nvitop
+
+      - name: Extract version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        run: ./build.sh
+
+      - name: Patch DEB version
+        run: |
+          sed -i 's/^Version:.*/Version: ${{ steps.ver.outputs.version }}/' debian/control
+          sed -i "s|nvfan_[0-9.]*_amd64.deb|nvfan_${{ steps.ver.outputs.version }}_amd64.deb|" make-deb.sh
+
+      - name: Build DEB package
+        run: ./make-deb.sh
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            nvfan
+            nvfan_*_amd64.deb
+          generate_release_notes: true

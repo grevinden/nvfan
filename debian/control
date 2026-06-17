@@ -1,0 +1,9 @@
+Package: nvfan
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: amd64
+Depends: nvidia-utils
+Maintainer: nvfan
+Description: GPU fan curve controller for NVIDIA
+ Runs as a systemd service, adjusts GPU fan speed based on temperature.

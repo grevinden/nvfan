@@ -1,0 +1,16 @@
+# Nuitka build artifacts
+*.build/
+*.dist/
+*.onefile-build/
+
+# Compiled binary
+nvfan
+
+# DEB package
+*.deb
+*.deb-staging/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
