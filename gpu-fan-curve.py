@@ -13,10 +13,10 @@ Temperature curve (aggressive):
 Usage: sudo python3 gpu-fan-curve.py
 """
 
+import logging
+import signal
 import sys
 import time
-import signal
-import logging
 from pathlib import Path
 
 # Setup logging
@@ -33,15 +33,13 @@ log = logging.getLogger("gpu-fan-curve")
 
 # Temperature → fan speed curve (sorted ascending by temp)
 FAN_CURVE = [
-    (45, 40),   # Below 45°C → 40%
-    (55, 55),   # 45-55°C   → 55%
-    (65, 70),   # 55-65°C   → 70%
+    (45, 40),  # Below 45°C → 40%
+    (55, 55),  # 45-55°C   → 55%
+    (65, 70),  # 55-65°C   → 70%
     (70, 100),  # >=70°C    → 100%
 ]
 
 POLL_INTERVAL = 5  # seconds between checks
-GPU_INDEX = 0
-FAN_INDEX = 0
 
 
 def get_target_fan(temp: float) -> int:
@@ -67,11 +65,18 @@ def main():
     signal.signal(signal.SIGINT, handle_signal)
 
     nvml.nvmlInit()
-    handle = nvml.nvmlDeviceGetHandleByIndex(GPU_INDEX)
 
-    # Switch to manual fan control
-    log.info("Setting fan control to MANUAL mode...")
-    nvml.nvmlQuery("nvmlDeviceSetFanControlPolicy", handle, FAN_INDEX, 1, ignore_errors=False)
+    device_count = nvml.nvmlQuery("nvmlDeviceGetCount")
+    log.info("Detected %d GPU(s)", device_count)
+
+    handles = []
+    for i in range(device_count):
+        handle = nvml.nvmlDeviceGetHandleByIndex(i)
+        log.info("GPU %d: Setting fan control to MANUAL mode...", i)
+        nvml.nvmlQuery(
+            "nvmlDeviceSetFanControlPolicy", handle, 0, 1, ignore_errors=False
+        )
+        handles.append(handle)
 
     # Print the curve
     log.info("Fan curve:")
@@ -85,28 +90,38 @@ def main():
     log.info("Starting fan curve controller (poll every %ds)...", POLL_INTERVAL)
     log.info("Press Ctrl+C or send SIGTERM to stop.")
 
-    prev_fan = -1
+    prev_fans = {i: -1 for i in range(len(handles))}
 
     while running:
         try:
-            temp = nvml.nvmlQuery("nvmlDeviceGetTemperature", handle, 0)
-            fan_speed = nvml.nvmlQuery("nvmlDeviceGetFanSpeed", handle)
-            target = get_target_fan(temp)
+            for gpu_idx, handle in enumerate(handles):
+                temp = nvml.nvmlQuery("nvmlDeviceGetTemperature", handle, 0)
+                fan_speed = nvml.nvmlQuery("nvmlDeviceGetFanSpeed", handle)
+                target = get_target_fan(temp)
 
-            if target != prev_fan:
-                log.info(
-                    "Temp: %3.1f°C | Fan: %3d%% → %3d%% (target)",
-                    temp, fan_speed, target,
-                )
-                nvml.nvmlQuery(
-                    "nvmlDeviceSetFanSpeed_v2", handle, FAN_INDEX, target,
-                    ignore_errors=False,
-                )
-                prev_fan = target
-            else:
-                log.debug(
-                    "Temp: %3.1f°C | Fan: %3d%% (stable)", temp, fan_speed
-                )
+                if target != prev_fans[gpu_idx]:
+                    log.info(
+                        "GPU %d | Temp: %3.1f°C | Fan: %3d%% → %3d%% (target)",
+                        gpu_idx,
+                        temp,
+                        fan_speed,
+                        target,
+                    )
+                    nvml.nvmlQuery(
+                        "nvmlDeviceSetFanSpeed_v2",
+                        handle,
+                        0,
+                        target,
+                        ignore_errors=False,
+                    )
+                    prev_fans[gpu_idx] = target
+                else:
+                    log.debug(
+                        "GPU %d | Temp: %3.1f°C | Fan: %3d%% (stable)",
+                        gpu_idx,
+                        temp,
+                        fan_speed,
+                    )
 
         except Exception as e:
             log.error("Error: %s", e)
